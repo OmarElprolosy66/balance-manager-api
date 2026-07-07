@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: money-manager-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: money
+    ports:
+      - "5431:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: money-manager-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - DATABASE_URL=postgres://postgres:123456@db:5432/money?connection_limit=5&pool_timeout=5
+      - JWT_SECRET
+      - JWT_ACCESS_TOKEN_EXPIRES_IN=15m
+      - JWT_REFRESH_SECRET
+      - JWT_REFRESH_TOKEN_EXPIRES_IN=30d
+      - REFRESH_TOKEN_TTL_SECONDS=2592000
+      - COOKIE_SECRET
+      - SMTP_HOST=sandbox.smtp.mailtrap.io
+      - SMTP_PORT=465
+      - SMTP_USER
+      - SMTP_PASS
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
