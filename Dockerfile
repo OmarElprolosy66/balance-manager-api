@@ -13,8 +13,8 @@ COPY . .
 # Compile TypeScript source
 RUN npm run build
 
-# Make sure entrypoint script is executable
-RUN chmod +x /app/entrypoint.sh
+# Convert Windows line endings (CRLF) to Unix line endings (LF) and make the script executable
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 EXPOSE 3000
 
