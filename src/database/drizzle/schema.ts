@@ -270,3 +270,17 @@ export const passwordResetOtpsTable = pgTable('password_reset_otps', {
     expiresAt: timestamp('expiresAt').notNull(),
     createdAt: timestamp('createdAt').notNull().defaultNow(),
 });
+
+export const emailVerificationOtpsTable = pgTable(
+    'email_verification_otps',
+    {
+        id: uuid('id')
+            .primaryKey()
+            .$default(() => uuidv7()),
+        email: varchar('email', { length: 255 }).notNull(),
+        otp: varchar('otp', { length: 6 }).notNull(),
+        expiresAt: timestamp('expiresAt').notNull(),
+        createdAt: timestamp('createdAt').notNull().defaultNow(),
+    },
+    (table) => [index('idx_email_verification_otps_email').on(table.email)],
+);

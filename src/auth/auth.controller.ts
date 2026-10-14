@@ -15,6 +15,26 @@ const COOKIES_OPTIONS: CookieOptions = {
         : 30 * 24 * 60 * 60 * 1000, // 30 days
 } as const;
 
+export async function requestSignupOtp(req: Request, res: Response) {
+    const { email } = req.body as { email: string };
+    if (!email) {
+        throw new BadRequestError('Email is required');
+    }
+    await authService.requestSignupOtp(email);
+    return res.json(
+        success({ message: 'Verification OTP sent to your email.' }),
+    );
+}
+
+export async function verifySignupOtp(req: Request, res: Response) {
+    const { email, otp } = req.body as { email: string; otp: string };
+    if (!email || !otp) {
+        throw new BadRequestError('Email and OTP are required');
+    }
+    const result = await authService.verifySignupOtp(email, otp);
+    return res.json(success(result));
+}
+
 export async function signUp(req: Request, res: Response) {
     const dto: SignUpDto = req.body as SignUpDto;
     const { user, accessToken, refreshToken } = await authService.signUp(dto);

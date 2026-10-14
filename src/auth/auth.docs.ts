@@ -5,6 +5,9 @@ import {
 } from '@/common/utils/swagger';
 import {
     SignUpDtoSchema,
+    RequestSignupOtpSchema,
+    VerifySignupOtpSchema,
+    VerifySignupOtpResponseSchema,
     LogInDtoSchema,
     GoogleMobileAuthSchema,
     RequestPasswordResetSchema,
@@ -13,6 +16,89 @@ import {
     UserResponseDtoSchema,
 } from './dto/auth.dto';
 import { z } from 'zod';
+
+// POST /auth/signup/request-otp
+registry.registerPath({
+    method: 'post',
+    path: '/auth/signup/request-otp',
+    summary: 'Request email verification OTP for signup',
+    tags: ['Auth'],
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: RequestSignupOtpSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'OTP sent to email successfully',
+            content: {
+                'application/json': {
+                    schema: zSuccessResponse(
+                        z.object({
+                            message: z.string().openapi({
+                                example: 'Verification OTP sent to your email.',
+                            }),
+                        }),
+                    ),
+                },
+            },
+        },
+        400: {
+            description: 'Validation error',
+            content: {
+                'application/json': {
+                    schema: zFailedResponse('VALIDATION_ERROR'),
+                },
+            },
+        },
+        409: {
+            description: 'Email already exists',
+            content: {
+                'application/json': { schema: zFailedResponse('CONFLICT') },
+            },
+        },
+    },
+});
+
+// POST /auth/signup/verify-otp
+registry.registerPath({
+    method: 'post',
+    path: '/auth/signup/verify-otp',
+    summary: 'Verify signup email OTP and obtain verification token',
+    tags: ['Auth'],
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: VerifySignupOtpSchema,
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description:
+                'OTP verified successfully. Returns verificationToken for signup.',
+            content: {
+                'application/json': {
+                    schema: zSuccessResponse(VerifySignupOtpResponseSchema),
+                },
+            },
+        },
+        400: {
+            description: 'Invalid or expired OTP',
+            content: {
+                'application/json': {
+                    schema: zFailedResponse('BAD_REQUEST'),
+                },
+            },
+        },
+    },
+});
 
 // POST /auth/signup
 registry.registerPath({

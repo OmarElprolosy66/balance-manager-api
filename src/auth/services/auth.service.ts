@@ -3,6 +3,7 @@ import * as authRepo from '../repository/drizzle/auth.repository';
 import * as passwordService from './password.service';
 import * as jwtService from './jwt.service';
 import * as passwordResetOtpRepo from '../repository/drizzle/password.repository';
+import * as emailVerificationRepo from '../repository/drizzle/email-verification.repository';
 
 import {
     AppError,
@@ -17,9 +18,87 @@ import { createHash } from 'crypto';
 import { sendMail } from './mail.service';
 import { sign, verify } from 'jsonwebtoken';
 
+export async function requestSignupOtp(email: string): Promise<void> {
+    const existingUser = await authRepo.isExistsByEmail(email);
+    if (existingUser) {
+        throw new ConflictError('User with this email already exists');
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await emailVerificationRepo.createEmailVerificationOtp(
+        email,
+        otp,
+        expiresAt,
+    );
+
+    const subject = 'Your Signup Verification Code';
+    const html = `
+        <p>Hello,</p>
+        <p>Thank you for signing up for Money Manager. Your One-Time Password (OTP) is:</p>
+        <h2 style="font-size: 24px; letter-spacing: 2px;">${otp}</h2>
+        <p>This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+    `;
+    await sendMail(email, subject, html);
+}
+
+export async function verifySignupOtp(
+    email: string,
+    otp: string,
+): Promise<{ verificationToken: string }> {
+    const validOtp = await emailVerificationRepo.findValidEmailVerificationOtp(
+        email,
+        otp,
+    );
+
+    if (!validOtp) {
+        throw new BadRequestError('Invalid or expired OTP');
+    }
+
+    await emailVerificationRepo.deleteEmailVerificationOtp(validOtp.id);
+
+    const secretKey = process.env.JWT_SECRET as string;
+    const verificationToken = sign(
+        { email, purpose: 'signup_verification' },
+        secretKey,
+        { expiresIn: '15m' },
+    );
+
+    return { verificationToken };
+}
+
+interface SignupVerificationTokenPayload {
+    email: string;
+    purpose: string;
+}
+
 export async function signUp(
     dto: SignUpDto,
 ): Promise<{ user: UserEntity; accessToken: string; refreshToken: string }> {
+    const secretKey = process.env.JWT_SECRET as string;
+
+    let decoded: SignupVerificationTokenPayload;
+    try {
+        decoded = verify(
+            dto.verificationToken,
+            secretKey,
+        ) as SignupVerificationTokenPayload;
+    } catch {
+        throw new BadRequestError('Invalid or expired verification token');
+    }
+
+    if (
+        !decoded ||
+        typeof decoded !== 'object' ||
+        decoded.purpose !== 'signup_verification' ||
+        decoded.email?.toLowerCase() !== dto.email.toLowerCase()
+    ) {
+        throw new BadRequestError(
+            'Invalid or expired verification token for this email',
+        );
+    }
+
     const existingUser = await authRepo.isExistsByEmail(dto.email);
     if (existingUser) {
         throw new ConflictError('User with this email already exists');
@@ -228,7 +307,7 @@ export async function googleMobileAuth(params: { idToken: string }) {
         throw new BadRequestError('Invalid Google idToken');
     }
 
-    const payload = (await response.json()) as any;
+    const payload = await response.json();
     const email = payload.email;
     const name = payload.name || payload.given_name || 'Google User';
 

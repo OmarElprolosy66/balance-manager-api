@@ -127,7 +127,7 @@ export async function verifyRefreshToken(token: string): Promise<JwtPayload> {
                     // check if the refresh token hash exists in the database
                     const { storedToken, isRevoked, expiresAt } =
                         (await devicesRepo.findRefreshTokenHashById(
-                            (decoded as JwtPayload).did as string,
+                            (decoded as JwtPayload).did,
                         )) ?? {
                             storedToken: null,
                             isRevoked: null,

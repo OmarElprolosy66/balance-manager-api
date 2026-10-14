@@ -6,7 +6,12 @@ import {
     closeDatabaseConnection,
 } from './test-helper';
 import { db } from '@/database/drizzle/db';
-import { passwordResetOtpsTable } from '@/database/drizzle/schema';
+import {
+    passwordResetOtpsTable,
+    emailVerificationOtpsTable,
+} from '@/database/drizzle/schema';
+import { eq } from 'drizzle-orm';
+import { sign } from 'jsonwebtoken';
 
 beforeAll(async () => {
     await seedCurrencies();
@@ -30,18 +35,45 @@ describe('Authentication Module (e2e)', () => {
         baseCurrency: 'USD',
     };
 
-    it('should register a new user, log in, rotate refresh token, and log out', async () => {
-        // 1. Sign Up
+    it('should handle signup OTP verification flow and complete registration, login, token refresh, and logout', async () => {
+        // 1. Request Signup OTP
+        const otpReqRes = await request(app)
+            .post('/api/v1/auth/signup/request-otp')
+            .send({ email: testUser.email });
+
+        expect(otpReqRes.status).toBe(200);
+        expect(otpReqRes.body.success).toBe(true);
+
+        // Fetch OTP from DB
+        const [otpRecord] = await db
+            .select()
+            .from(emailVerificationOtpsTable)
+            .where(eq(emailVerificationOtpsTable.email, testUser.email))
+            .limit(1);
+        expect(otpRecord).toBeDefined();
+
+        // 2. Verify Signup OTP
+        const verifyOtpRes = await request(app)
+            .post('/api/v1/auth/signup/verify-otp')
+            .send({ email: testUser.email, otp: otpRecord.otp });
+
+        expect(verifyOtpRes.status).toBe(200);
+        expect(verifyOtpRes.body.success).toBe(true);
+        expect(verifyOtpRes.body.data.verificationToken).toBeDefined();
+
+        const verificationToken = verifyOtpRes.body.data.verificationToken;
+
+        // 3. Complete Sign Up using verificationToken
         const signupRes = await request(app)
             .post('/api/v1/auth/signup')
-            .send(testUser);
+            .send({ ...testUser, verificationToken });
 
         expect(signupRes.status).toBe(201);
         expect(signupRes.body.success).toBe(true);
         expect(signupRes.body.data.email).toBe(testUser.email);
         expect(signupRes.body.data.accessToken).toBeDefined();
 
-        // 2. Log In
+        // 4. Log In
         const loginRes = await request(app).post('/api/v1/auth/login').send({
             email: testUser.email,
             password: testUser.password,
@@ -61,7 +93,7 @@ describe('Authentication Module (e2e)', () => {
         );
         expect(refreshTokenCookie).toBeDefined();
 
-        // 3. Refresh Token
+        // 5. Refresh Token
         const refreshRes = await request(app)
             .post('/api/v1/auth/refresh-token')
             .set('Cookie', [refreshTokenCookie || ''])
@@ -71,7 +103,7 @@ describe('Authentication Module (e2e)', () => {
         expect(refreshRes.body.success).toBe(true);
         expect(refreshRes.body.data.accessToken).toBeDefined();
 
-        // 4. Log Out
+        // 6. Log Out
         const logoutRes = await request(app)
             .get('/api/v1/auth/logout')
             .set('Authorization', `Bearer ${refreshRes.body.data.accessToken}`)
@@ -82,9 +114,90 @@ describe('Authentication Module (e2e)', () => {
         expect(logoutRes.body.success).toBe(true);
     }, 90000);
 
+    it('should reject signup without a valid verification token', async () => {
+        // Attempt signup without verificationToken
+        const missingRes = await request(app)
+            .post('/api/v1/auth/signup')
+            .send(testUser);
+
+        expect(missingRes.status).toBe(400);
+
+        // Attempt signup with fake verificationToken
+        const invalidRes = await request(app)
+            .post('/api/v1/auth/signup')
+            .send({ ...testUser, verificationToken: 'invalid.token.here' });
+
+        expect(invalidRes.status).toBe(400);
+
+        // Attempt signup with token issued for a different email
+        const secretKey =
+            process.env.JWT_SECRET ||
+            '120f6e5b4ea32f65bda68452fcfaaef06b0136e1d0e4a6f60bc3771fa0936dd6';
+        const mismatchedToken = sign(
+            {
+                email: 'someoneelse@example.com',
+                purpose: 'signup_verification',
+            },
+            secretKey,
+            { expiresIn: '15m' },
+        );
+
+        const mismatchRes = await request(app)
+            .post('/api/v1/auth/signup')
+            .send({ ...testUser, verificationToken: mismatchedToken });
+
+        expect(mismatchRes.status).toBe(400);
+    });
+
+    it('should reject signup OTP verification with incorrect OTP', async () => {
+        await request(app)
+            .post('/api/v1/auth/signup/request-otp')
+            .send({ email: testUser.email });
+
+        const verifyRes = await request(app)
+            .post('/api/v1/auth/signup/verify-otp')
+            .send({ email: testUser.email, otp: '000000' });
+
+        expect(verifyRes.status).toBe(400);
+    });
+
+    it('should reject signup OTP request if user already exists', async () => {
+        const secretKey =
+            process.env.JWT_SECRET ||
+            '120f6e5b4ea32f65bda68452fcfaaef06b0136e1d0e4a6f60bc3771fa0936dd6';
+        const verificationToken = sign(
+            { email: testUser.email, purpose: 'signup_verification' },
+            secretKey,
+            { expiresIn: '15m' },
+        );
+
+        // Create user first
+        await request(app)
+            .post('/api/v1/auth/signup')
+            .send({ ...testUser, verificationToken });
+
+        // Request OTP for already registered email
+        const conflictRes = await request(app)
+            .post('/api/v1/auth/signup/request-otp')
+            .send({ email: testUser.email });
+
+        expect(conflictRes.status).toBe(409);
+    });
+
     it('should handle OTP password reset flow (request, verify, confirm)', async () => {
-        // Pre-requisite: Create user
-        await request(app).post('/api/v1/auth/signup').send(testUser);
+        // Pre-requisite: Create user with verificationToken
+        const secretKey =
+            process.env.JWT_SECRET ||
+            '120f6e5b4ea32f65bda68452fcfaaef06b0136e1d0e4a6f60bc3771fa0936dd6';
+        const verificationToken = sign(
+            { email: testUser.email, purpose: 'signup_verification' },
+            secretKey,
+            { expiresIn: '15m' },
+        );
+
+        await request(app)
+            .post('/api/v1/auth/signup')
+            .send({ ...testUser, verificationToken });
 
         // 1. Request OTP
         const reqRes = await request(app)

@@ -15,7 +15,6 @@ export const validate = (schemas: ValidationSchemas) => {
     ): Promise<void> => {
         try {
             if (schemas.params) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 const parsedParams = await schemas.params.parseAsync(
                     req.params,
                 );
@@ -27,7 +26,6 @@ export const validate = (schemas: ValidationSchemas) => {
                 });
             }
             if (schemas.query) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 const parsedQuery = await schemas.query.parseAsync(req.query);
                 Object.defineProperty(req, 'query', {
                     value: parsedQuery,

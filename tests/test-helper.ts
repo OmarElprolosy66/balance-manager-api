@@ -7,16 +7,19 @@ import {
     transactionsTable,
     recurringTransactionsTable,
     passwordResetOtpsTable,
+    emailVerificationOtpsTable,
 } from '@/database/drizzle/schema';
 import { sql, eq } from 'drizzle-orm';
 import request from 'supertest';
 import { app } from '@/main';
 import { v7 as uuidv7 } from 'uuid';
+import { sign } from 'jsonwebtoken';
 
 /**
  * Truncate all tables to ensure clean slate for tests.
  */
 export async function clearDatabase() {
+    await db.delete(emailVerificationOtpsTable);
     await db.delete(passwordResetOtpsTable);
     await db.delete(recurringTransactionsTable);
     await db.delete(transactionsTable);
@@ -64,6 +67,15 @@ export async function createUserAndLogin(
     email = 'testuser@example.com',
     name = 'Test User',
 ) {
+    const secretKey =
+        process.env.JWT_SECRET ||
+        '120f6e5b4ea32f65bda68452fcfaaef06b0136e1d0e4a6f60bc3771fa0936dd6';
+    const verificationToken = sign(
+        { email, purpose: 'signup_verification' },
+        secretKey,
+        { expiresIn: '15m' },
+    );
+
     const signupData = {
         email,
         password: 'password123',
@@ -71,6 +83,7 @@ export async function createUserAndLogin(
         deviceIdentifier: 'test-device-uuid',
         platform: 'android',
         baseCurrency: 'USD',
+        verificationToken,
     };
 
     // Sign up

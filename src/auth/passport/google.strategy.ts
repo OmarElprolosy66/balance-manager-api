@@ -61,7 +61,7 @@ if (clientID && clientSecret && callbackURL) {
 
                     done(null, user);
                 } catch (error) {
-                    done(error as Error, false);
+                    done(error, false);
                 }
             },
         ),

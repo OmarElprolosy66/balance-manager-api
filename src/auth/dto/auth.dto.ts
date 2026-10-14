@@ -3,6 +3,43 @@ import { z } from 'zod';
 
 extendZodWithOpenApi(z);
 
+export const RequestSignupOtpSchema = z.object({
+    email: z
+        .string()
+        .email()
+        .describe('The email address of the user who wants to register.')
+        .openapi({ example: 'user@example.com' }),
+});
+export type RequestSignupOtpDto = z.infer<typeof RequestSignupOtpSchema>;
+
+export const VerifySignupOtpSchema = z.object({
+    email: z
+        .string()
+        .email()
+        .describe('The email address of the user.')
+        .openapi({ example: 'user@example.com' }),
+    otp: z
+        .string()
+        .length(6)
+        .describe('The 6-digit verification code sent to the email.')
+        .openapi({ example: '123456' }),
+});
+export type VerifySignupOtpDto = z.infer<typeof VerifySignupOtpSchema>;
+
+export const VerifySignupOtpResponseSchema = z.object({
+    verificationToken: z
+        .string()
+        .describe(
+            'The short-lived verification token required to complete signup.',
+        )
+        .openapi({
+            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi...',
+        }),
+});
+export type VerifySignupOtpResponseDto = z.infer<
+    typeof VerifySignupOtpResponseSchema
+>;
+
 export const SignUpDtoSchema = z.object({
     email: z.string().email().openapi({ example: 'user@example.com' }),
     password: z.string().min(6).openapi({ example: 'StrongPassword123' }),
@@ -13,12 +50,22 @@ export const SignUpDtoSchema = z.object({
         .openapi({ example: 'device-uuid-1234' }),
     platform: z.string().min(1).openapi({ example: 'android' }),
     baseCurrency: z.string().length(3).openapi({ example: 'USD' }),
+    verificationToken: z
+        .string()
+        .min(1)
+        .describe(
+            'The short-lived verification token obtained after verifying signup OTP.',
+        )
+        .openapi({
+            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi...',
+        }),
 });
 export type SignUpDto = z.infer<typeof SignUpDtoSchema>;
 
 export const LogInDtoSchema = SignUpDtoSchema.omit({
     name: true,
     baseCurrency: true,
+    verificationToken: true,
 });
 export type LogInDto = z.infer<typeof LogInDtoSchema>;
 

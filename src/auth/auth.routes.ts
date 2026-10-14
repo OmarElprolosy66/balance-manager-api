@@ -5,6 +5,8 @@ import * as authController from './auth.controller';
 import {
     LogInDtoSchema,
     SignUpDtoSchema,
+    RequestSignupOtpSchema,
+    VerifySignupOtpSchema,
     GoogleMobileAuthSchema,
     RequestPasswordResetSchema,
     VerifyPasswordResetOtpSchema,
@@ -14,6 +16,17 @@ import {
 const router = Router();
 
 router.post('/login', validate({ body: LogInDtoSchema }), authController.logIn);
+
+router.post(
+    '/signup/request-otp',
+    validate({ body: RequestSignupOtpSchema }),
+    authController.requestSignupOtp,
+);
+router.post(
+    '/signup/verify-otp',
+    validate({ body: VerifySignupOtpSchema }),
+    authController.verifySignupOtp,
+);
 router.post(
     '/signup',
     validate({ body: SignUpDtoSchema }),
